@@ -1,0 +1,43 @@
+-- creating stages
+CREATE OR REPLACE STAGE Internal_stage
+DIRECTORY = ( ENABLE = TRUE)
+    file_format = (type = 'CSV' FIELD_DELIMITER = ',' SKIP_HEADER = 1);
+
+CREATE OR REPLACE STAGE stage_1
+DIRECTORY = ( ENABLE = TRUE)
+    file_format = (type = 'CSV' FIELD_DELIMITER = ',' SKIP_HEADER = 1);
+
+CREATE OR REPLACE STAGE stage_2
+DIRECTORY = ( ENABLE = TRUE)
+    file_format = (type = 'CSV' FIELD_DELIMITER = ',' SKIP_HEADER = 1);
+
+CREATE OR REPLACE STAGE stage_3
+DIRECTORY = ( ENABLE = TRUE)
+    file_format = (type = 'CSV' FIELD_DELIMITER = ',' SKIP_HEADER = 1);
+
+-- creating streams for CDC loading
+CREATE OR REPLACE STREAM to_landing_stream ON STAGE INTERNAL_STAGE; 
+CREATE OR REPLACE STREAM landing_to_dimensional_stream ON TABLE landing.raw_data;
+CREATE OR REPLACE STREAM facts_to_mart_stream ON TABLE dimensional.flights;
+
+--creating tasks for data loading and transformation
+create or replace task to_landing_task
+warehouse=COMPUTE_WH
+schedule = '1 minute'
+when SYSTEM$STREAM_HAS_DATA('to_landing_stream')
+as 
+call landing.load_data_with_timestamp();
+
+create or replace task landing_to_dimensional_task
+warehouse=COMPUTE_WH
+after to_landing_task
+when SYSTEM$STREAM_HAS_DATA('landing_to_dimensional_stream')
+as 
+call dimensional.landing_to_dimensional_procedure();
+
+create or replace task facts_to_mart_task
+warehouse=COMPUTE_WH
+after landing_to_dimensional_task
+when SYSTEM$STREAM_HAS_DATA('facts_to_mart_stream')
+as 
+call datamart.load_to_datamart();
